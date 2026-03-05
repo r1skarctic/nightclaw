@@ -2,6 +2,12 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.3.5
+
+### Fixes
+
+- Install: fix tar entry error and spawn-sh failure when installing from a GitHub commit tarball via npm.
+
 ## 2026.3.3
 
 ### Changes
