@@ -4,6 +4,7 @@ import {
   applyInputProvenanceToUserMessage,
   type InputProvenance,
 } from "../sessions/input-provenance.js";
+import { stripThinkingSignatureForPersistence } from "./persist-strip-thinking.js";
 import { installSessionToolResultGuard } from "./session-tool-result-guard.js";
 
 export type GuardedSessionManager = SessionManager & {
@@ -62,7 +63,9 @@ export function guardSessionManager(
 
   const guard = installSessionToolResultGuard(sessionManager, {
     transformMessageForPersistence: (message) =>
-      applyInputProvenanceToUserMessage(message, opts?.inputProvenance),
+      stripThinkingSignatureForPersistence(
+        applyInputProvenanceToUserMessage(message, opts?.inputProvenance),
+      ),
     transformToolResultForPersistence: transform,
     allowSyntheticToolResults: opts?.allowSyntheticToolResults,
     allowedToolNames: opts?.allowedToolNames,
