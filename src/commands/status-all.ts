@@ -181,8 +181,8 @@ export async function statusAllCommand(
     const callOverrides = remoteUrlMissing
       ? {
           url: connection.url,
-          token: localFallbackAuth.token,
-          password: localFallbackAuth.password,
+          token: localProbeAuthResolution.auth.token,
+          password: localProbeAuthResolution.auth.password,
         }
       : {};
 
