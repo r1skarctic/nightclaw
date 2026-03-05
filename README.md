@@ -1,4 +1,4 @@
-# 🌑 NightClaw — Personal AI Assistant
+# 🌙 NightClaw — Personal AI Assistant
 
 <p align="center">
     <picture>
@@ -482,7 +482,7 @@ Use these when you’re past the onboarding flow and want the deeper reference.
 
 ## Molty
 
-NightClaw is a fork of OpenClaw with features from the dark side. 🌑
+NightClaw is a fork of OpenClaw with features from the dark side. 🌙
 by Peter Steinberger and the community.
 
 - [openclaw.ai](https://openclaw.ai)

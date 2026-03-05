@@ -9,6 +9,7 @@ import { assertSupportedRuntime } from "../infra/runtime-guard.js";
 import { installUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
 import { enableConsoleCapture } from "../logging.js";
 import { getCommandPathWithRootOptions, getPrimaryCommand, hasHelpOrVersion } from "./argv.js";
+import { maybeRunOpenclawMigration } from "./migrate-openclaw.js";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
 import { tryRouteCli } from "./route.js";
 import { normalizeWindowsArgv } from "./windows-argv.js";
@@ -78,6 +79,11 @@ export async function runCli(argv: string[] = process.argv) {
   if (shouldEnsureCliPath(normalizedArgv)) {
     ensureOpenClawCliOnPath();
   }
+
+  // One-time migration: if an ~/.openclaw installation or openclaw systemd/launchd
+  // services are detected, migrate them to ~/.nightclaw / nightclaw services.
+  // Fire-and-forget: errors are logged as warnings, never fatal.
+  maybeRunOpenclawMigration(process.env, (m) => console.warn(m)).catch(() => {});
 
   // Enforce the minimum supported runtime before doing any work.
   assertSupportedRuntime();

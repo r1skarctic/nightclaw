@@ -155,7 +155,7 @@ describe("daemon-cli coverage", () => {
         OPENCLAW_CONFIG_PATH: "/tmp/openclaw-daemon-state/openclaw.json",
         OPENCLAW_GATEWAY_PORT: "19001",
       },
-      sourcePath: "/tmp/ai.openclaw.gateway.plist",
+      sourcePath: "/tmp/ai.nightclaw.gateway.plist",
     });
 
     await runDaemonCommand(["daemon", "status", "--json"]);

@@ -51,7 +51,7 @@ function expectLaunchdKickstartSupervised(params?: { launchJobLabel?: string }) 
   if (params?.launchJobLabel) {
     process.env.LAUNCH_JOB_LABEL = params.launchJobLabel;
   }
-  process.env.OPENCLAW_LAUNCHD_LABEL = "ai.openclaw.gateway";
+  process.env.OPENCLAW_LAUNCHD_LABEL = "ai.nightclaw.gateway";
   triggerOpenClawRestartMock.mockReturnValue({ ok: true, method: "launchctl" });
   const result = restartGatewayProcessWithFreshPid();
   expect(result.mode).toBe("supervised");
@@ -68,20 +68,20 @@ describe("restartGatewayProcessWithFreshPid", () => {
   });
 
   it("returns supervised when launchd/systemd hints are present", () => {
-    process.env.LAUNCH_JOB_LABEL = "ai.openclaw.gateway";
+    process.env.LAUNCH_JOB_LABEL = "ai.nightclaw.gateway";
     const result = restartGatewayProcessWithFreshPid();
     expect(result.mode).toBe("supervised");
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it("runs launchd kickstart helper on macOS when launchd label is set", () => {
-    expectLaunchdKickstartSupervised({ launchJobLabel: "ai.openclaw.gateway" });
+    expectLaunchdKickstartSupervised({ launchJobLabel: "ai.nightclaw.gateway" });
   });
 
   it("returns failed when launchd kickstart helper fails", () => {
     setPlatform("darwin");
-    process.env.LAUNCH_JOB_LABEL = "ai.openclaw.gateway";
-    process.env.OPENCLAW_LAUNCHD_LABEL = "ai.openclaw.gateway";
+    process.env.LAUNCH_JOB_LABEL = "ai.nightclaw.gateway";
+    process.env.OPENCLAW_LAUNCHD_LABEL = "ai.nightclaw.gateway";
     triggerOpenClawRestartMock.mockReturnValue({
       ok: false,
       method: "launchctl",
@@ -97,7 +97,7 @@ describe("restartGatewayProcessWithFreshPid", () => {
   it("does not schedule kickstart on non-darwin platforms", () => {
     setPlatform("linux");
     process.env.INVOCATION_ID = "abc123";
-    process.env.OPENCLAW_LAUNCHD_LABEL = "ai.openclaw.gateway";
+    process.env.OPENCLAW_LAUNCHD_LABEL = "ai.nightclaw.gateway";
 
     const result = restartGatewayProcessWithFreshPid();
 
@@ -133,7 +133,7 @@ describe("restartGatewayProcessWithFreshPid", () => {
 
   it("returns supervised when OPENCLAW_SYSTEMD_UNIT is set", () => {
     clearSupervisorHints();
-    process.env.OPENCLAW_SYSTEMD_UNIT = "openclaw-gateway.service";
+    process.env.OPENCLAW_SYSTEMD_UNIT = "nightclaw-gateway.service";
     const result = restartGatewayProcessWithFreshPid();
     expect(result.mode).toBe("supervised");
     expect(spawnMock).not.toHaveBeenCalled();

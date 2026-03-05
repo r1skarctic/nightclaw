@@ -1,0 +1,205 @@
+name: Sync Upstream (openclaw/openclaw)
+
+# ─── triggers ──────────────────────────────────────────────────────────────────
+on:
+  schedule:
+    # Run every Monday at 03:00 UTC.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no push / no release)"
+        required: false
+        default: "false"
+        type: boolean
+
+# Only one sync may run at a time.
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Merge upstream commits & patch NightClaw brand
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Check out the nightclaw repo (full history needed for merges) ──────
+      - name: Checkout NightClaw
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Configure git identity ─────────────────────────────────────────────
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ── 3. Read current NightClaw version ────────────────────────────────────
+      - name: Read NightClaw version
+        id: nightclaw_ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # ── 4. Fetch upstream & resolve latest tag ───────────────────────────────
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/openclaw/openclaw.git || true
+
+      - name: Fetch upstream
+        run: git fetch upstream --tags --no-recurse-submodules
+
+      - name: Resolve latest upstream version tag
+        id: upstream_ver
+        run: |
+          # Find the latest semver-style tag (YYYY.M.D or YYYY.M.D-suffix).
+          LATEST=$(git tag --list 'v*' | grep -E '^v[0-9]{4}\.[0-9]+\.[0-9]+' | sort -V | tail -n1 | sed 's/^v//')
+          if [ -z "$LATEST" ]; then
+            LATEST=$(git tag --list '[0-9]*' | grep -E '^[0-9]{4}\.[0-9]+\.[0-9]+' | sort -V | tail -n1)
+          fi
+          echo "version=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Upstream latest: $LATEST"
+
+      # ── 5. Decide whether to sync ────────────────────────────────────────────
+      - name: Compare versions
+        id: need_sync
+        run: |
+          NC="${{ steps.nightclaw_ver.outputs.version }}"
+          UP="${{ steps.upstream_ver.outputs.version }}"
+          echo "NightClaw: $NC  |  Upstream: $UP"
+          if [ "$NC" = "$UP" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 6. Merge upstream commits (fail on conflict) ─────────────────────────
+      - name: Merge upstream into main
+        if: steps.need_sync.outputs.skip == 'false'
+        run: |
+          TAG="v${{ steps.upstream_ver.outputs.version }}"
+          # Fall back to untagged SHA if the tag isn't found.
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            TAG="${{ steps.upstream_ver.outputs.version }}"
+          fi
+          echo "Merging upstream up to $TAG …"
+          git merge "$TAG" \
+            --no-edit \
+            -m "chore: merge openclaw ${{ steps.upstream_ver.outputs.version }} upstream" \
+            || { echo "MERGE_CONFLICT=true" >> "$GITHUB_ENV"; exit 1; }
+
+      # ── 7. Apply NightClaw brand patches ────────────────────────────────────
+      - name: Patch brand references
+        if: steps.need_sync.outputs.skip == 'false'
+        run: |
+          # Replace stray 🦞 (lobster emoji) with 🌙 (moon) in text files.
+          # Exclude binary files and node_modules.
+          find . \
+            \( -name "node_modules" -o -name ".git" -o -name "dist" \) -prune \
+            -o -type f -print | \
+            xargs grep -lP '\x{1F99E}' 2>/dev/null | \
+            while read -r f; do
+              sed -i 's/🦞/🌙/g' "$f"
+              echo "Patched emoji in: $f"
+            done
+
+          # Replace "OpenClaw" brand text in non-URL, non-test contexts for
+          # key user-facing files only.
+          # README heading / brand text.
+          if grep -q '# 🦞 OpenClaw\|^# 🌑 OpenClaw\|^**OpenClaw** is a' README.md 2>/dev/null; then
+            sed -i \
+              -e 's/# 🦞 OpenClaw/# 🌙 NightClaw/g' \
+              -e 's/# 🌑 OpenClaw/# 🌙 NightClaw/g' \
+              -e 's/\*\*OpenClaw\*\* is a/\*\*NightClaw\*\* is a/g' \
+              README.md
+            echo "Patched brand in README.md"
+          fi
+
+          # appcast.xml title.
+          if grep -q '<title>OpenClaw</title>' appcast.xml 2>/dev/null; then
+            sed -i 's|<title>OpenClaw</title>|<title>NightClaw</title>|g' appcast.xml
+            echo "Patched brand in appcast.xml"
+          fi
+
+          # palette.ts — restore NightClaw purple palette if upstream reset it to orange.
+          if grep -q '#FF5A2D' src/terminal/palette.ts 2>/dev/null; then
+            cat > src/terminal/palette.ts << 'EOF'
+          // NightClaw palette tokens for CLI/UI theming. "lobster seam" == use this palette.
+          // Keep in sync with docs/cli/index.md (CLI palette section).
+          export const LOBSTER_PALETTE = {
+            accent: "#4b0090",
+            accentBright: "#6a00cc",
+            accentDim: "#360068",
+            info: "#8533ff",
+            success: "#2FBF71",
+            warn: "#FFB020",
+            error: "#E23D2D",
+            muted: "#8B7F77",
+          } as const;
+          EOF
+            echo "Restored NightClaw purple palette"
+          fi
+
+          # Stage any patched files.
+          git diff --quiet || git add -A
+
+      # ── 8. Update package version to match upstream ──────────────────────────
+      - name: Bump package.json version
+        if: steps.need_sync.outputs.skip == 'false'
+        run: |
+          UP="${{ steps.upstream_ver.outputs.version }}"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version = '$UP';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          git diff --quiet package.json || git add package.json
+
+      # ── 9. Commit the patched result ─────────────────────────────────────────
+      - name: Commit sync result
+        if: steps.need_sync.outputs.skip == 'false'
+        run: |
+          git diff --cached --quiet && git diff --quiet \
+            || git commit -m "chore: sync openclaw ${{ steps.upstream_ver.outputs.version }} + apply NightClaw patches"
+
+      # ── 10. Push (unless dry-run) ────────────────────────────────────────────
+      - name: Push to main
+        if: steps.need_sync.outputs.skip == 'false' && inputs.dry_run != 'true'
+        run: git push origin HEAD:main
+
+      # ── 11. Create a GitHub release ──────────────────────────────────────────
+      - name: Create GitHub release
+        if: steps.need_sync.outputs.skip == 'false' && inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.upstream_ver.outputs.version }}"
+          NOTES="Synced with openclaw/openclaw ${{ steps.upstream_ver.outputs.version }}.
+
+          NightClaw patches applied:
+          - 🦞 → 🌙 emoji replacement
+          - Brand text: OpenClaw → NightClaw in user-facing files
+          - Purple palette (#4b0090) restored if overwritten upstream"
+
+          gh release create "$TAG" \
+            --title "NightClaw ${{ steps.upstream_ver.outputs.version }}" \
+            --notes "$NOTES" \
+            --repo "${{ github.repository }}"
+
+      # ── Summary ───────────────────────────────────────────────────────────────
+      - name: Summary
+        run: |
+          if [ "${{ steps.need_sync.outputs.skip }}" = "true" ]; then
+            echo "✅ Already up to date with openclaw ${{ steps.upstream_ver.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "🌙 Synced to openclaw ${{ steps.upstream_ver.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Brand patches applied" >> "$GITHUB_STEP_SUMMARY"
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "- **Dry run** — nothing pushed / no release created" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
