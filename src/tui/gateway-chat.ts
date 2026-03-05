@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../config/config.js";
-import { resolveSecretInputRef } from "../config/types.secrets.js";
+import { hasConfiguredSecretInput, resolveSecretInputRef } from "../config/types.secrets.js";
 import {
   buildGatewayConnectionDetails,
   ensureExplicitGatewayAuth,
@@ -97,6 +97,27 @@ function throwGatewayAuthResolutionError(reason: string): never {
       "Fix: set OPENCLAW_GATEWAY_TOKEN/OPENCLAW_GATEWAY_PASSWORD, pass --token/--password,",
       "or resolve the configured secret provider for this credential.",
     ].join("\n"),
+  );
+}
+
+function assertExplicitGatewayAuthModeWhenBothConfigured(
+  config: ReturnType<typeof loadConfig>,
+): void {
+  const auth = config.gateway?.auth;
+  if (!auth) {
+    return;
+  }
+  if (typeof auth.mode === "string" && auth.mode.trim().length > 0) {
+    return;
+  }
+  const defaults = config.secrets?.defaults;
+  const hasToken = hasConfiguredSecretInput(auth.token, defaults);
+  const hasPassword = hasConfiguredSecretInput(auth.password, defaults);
+  if (!hasToken || !hasPassword) {
+    return;
+  }
+  throwGatewayAuthResolutionError(
+    "Invalid config: gateway.auth.token and gateway.auth.password are both configured, but gateway.auth.mode is unset. Set gateway.auth.mode to token or password.",
   );
 }
 
@@ -363,17 +384,50 @@ export async function resolveGatewayConnection(
     return { url, token, password };
   }
 
-  if (gatewayAuthMode === "password") {
-    const localPassword =
-      explicitAuth.password || envPassword
-        ? { value: explicitAuth.password ?? envPassword }
-        : await resolveConfiguredSecretInputString({
-            value: config.gateway?.auth?.password,
-            path: "gateway.auth.password",
-            env,
-            config,
-          });
-    const password = explicitAuth.password ?? envPassword ?? localPassword.value;
+  if (gatewayAuthMode === "none" || gatewayAuthMode === "trusted-proxy") {
+    return {
+      url,
+      token: explicitAuth.token ?? envToken,
+      password: explicitAuth.password ?? envPassword,
+    };
+  }
+
+  assertExplicitGatewayAuthModeWhenBothConfigured(config);
+
+  const defaults = config.secrets?.defaults;
+  const hasConfiguredToken = hasConfiguredSecretInput(config.gateway?.auth?.token, defaults);
+  const hasConfiguredPassword = hasConfiguredSecretInput(config.gateway?.auth?.password, defaults);
+  const localToken =
+    explicitAuth.token || envToken
+      ? { value: explicitAuth.token ?? envToken }
+      : await resolveConfiguredSecretInputString({
+          value: config.gateway?.auth?.token,
+          path: "gateway.auth.token",
+          env,
+          config,
+        });
+  const localPassword =
+    explicitAuth.password || envPassword
+      ? { value: explicitAuth.password ?? envPassword }
+      : await resolveConfiguredSecretInputString({
+          value: config.gateway?.auth?.password,
+          path: "gateway.auth.password",
+          env,
+          config,
+        });
+  const token = explicitAuth.token ?? envToken ?? localToken.value;
+  const password = explicitAuth.password ?? envPassword ?? localPassword.value;
+
+  const effectiveMode: "token" | "password" =
+    gatewayAuthMode === "password"
+      ? "password"
+      : gatewayAuthMode === "token"
+        ? "token"
+        : password || (hasConfiguredPassword && !hasConfiguredToken)
+          ? "password"
+          : "token";
+
+  if (effectiveMode === "password") {
     if (!password) {
       throwGatewayAuthResolutionError(
         localPassword.unresolvedRefReason ?? "Missing gateway auth password.",
@@ -386,32 +440,14 @@ export async function resolveGatewayConnection(
     };
   }
 
-  if (gatewayAuthMode !== "none" && gatewayAuthMode !== "trusted-proxy") {
-    const localToken =
-      explicitAuth.token || envToken
-        ? { value: explicitAuth.token ?? envToken }
-        : await resolveConfiguredSecretInputString({
-            value: config.gateway?.auth?.token,
-            path: "gateway.auth.token",
-            env,
-            config,
-          });
-    const token = explicitAuth.token ?? envToken ?? localToken.value;
-    if (!token) {
-      throwGatewayAuthResolutionError(
-        localToken.unresolvedRefReason ?? "Missing gateway auth token.",
-      );
-    }
-    return {
-      url,
-      token,
-      password: explicitAuth.password ?? envPassword,
-    };
+  if (!token) {
+    throwGatewayAuthResolutionError(
+      localToken.unresolvedRefReason ?? "Missing gateway auth token.",
+    );
   }
-
   return {
     url,
-    token: explicitAuth.token ?? envToken,
+    token,
     password: explicitAuth.password ?? envPassword,
   };
 }

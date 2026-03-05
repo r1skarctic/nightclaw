@@ -104,6 +104,37 @@ describe("resolveGatewayConnection", () => {
     expect(result.token).toBe("config-token");
   });
 
+  it("uses local password auth when gateway.auth.mode is unset and password-only is configured", async () => {
+    loadConfig.mockReturnValue({
+      gateway: {
+        mode: "local",
+        auth: {
+          password: "config-password",
+        },
+      },
+    });
+
+    const result = await resolveGatewayConnection({});
+    expect(result.password).toBe("config-password");
+    expect(result.token).toBeUndefined();
+  });
+
+  it("fails when both local token and password are configured but gateway.auth.mode is unset", async () => {
+    loadConfig.mockReturnValue({
+      gateway: {
+        mode: "local",
+        auth: {
+          token: "config-token",
+          password: "config-password",
+        },
+      },
+    });
+
+    await expect(resolveGatewayConnection({})).rejects.toThrow(
+      "gateway.auth.mode is unset. Set gateway.auth.mode to token or password.",
+    );
+  });
+
   it("resolves env-template config auth token from referenced env var", async () => {
     loadConfig.mockReturnValue({
       secrets: {
