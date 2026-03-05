@@ -87,6 +87,8 @@ const PREFLIGHT_MAX_COMMITS = 10;
 const START_DIRS = ["cwd", "argv1", "process"];
 const DEFAULT_PACKAGE_NAME = "nightclaw";
 const CORE_PACKAGE_NAMES = new Set([DEFAULT_PACKAGE_NAME, "openclaw"]);
+// GitHub repository used for git-based installs and updates.
+const GITHUB_REPO = "r1skarctic/nightclaw";
 
 function normalizeDir(value?: string | null) {
   if (!value) {
@@ -315,6 +317,31 @@ function managerInstallArgs(manager: "pnpm" | "bun" | "npm") {
 
 function normalizeTag(tag?: string) {
   return normalizePackageTagInput(tag, ["nightclaw", "openclaw", DEFAULT_PACKAGE_NAME]) ?? "latest";
+}
+
+/**
+ * Build the npm install spec for a global update.
+ * For the NightClaw package, always install from the GitHub repo so that
+ * updates are sourced from the fork (not from npmjs). For legacy/openclaw
+ * installs, fall back to the classic `<name>@<tag>` npmjs format.
+ */
+function buildInstallSpec(packageName: string, tag: string): string {
+  if (packageName === DEFAULT_PACKAGE_NAME) {
+    // Map npm dist-tags to git refs on the NightClaw GitHub repo.
+    //   latest / stable → HEAD of default branch (no ref suffix)
+    //   dev             → main branch
+    //   beta            → beta branch
+    //   vX.Y.Z          → specific release tag
+    if (tag === "latest" || tag === "stable") {
+      return `github:${GITHUB_REPO}`;
+    }
+    if (tag === "dev") {
+      return `github:${GITHUB_REPO}#main`;
+    }
+    return `github:${GITHUB_REPO}#${tag}`;
+  }
+  // Fallback for legacy openclaw global installs and unknown packages.
+  return `${packageName}@${tag}`;
 }
 
 export async function runGatewayUpdate(opts: UpdateRunnerOptions = {}): Promise<UpdateRunResult> {
@@ -873,7 +900,7 @@ export async function runGatewayUpdate(opts: UpdateRunnerOptions = {}): Promise<
     });
     const channel = opts.channel ?? DEFAULT_PACKAGE_CHANNEL;
     const tag = normalizeTag(opts.tag ?? channelToNpmTag(channel));
-    const spec = `${packageName}@${tag}`;
+    const spec = buildInstallSpec(packageName, tag);
     const steps: UpdateStepResult[] = [];
     const updateStep = await runStep({
       runCommand,

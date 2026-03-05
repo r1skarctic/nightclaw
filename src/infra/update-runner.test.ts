@@ -175,11 +175,11 @@ describe("runGatewayUpdate", () => {
     return runWithCommand(runner, options);
   }
 
-  async function seedGlobalPackageRoot(pkgRoot: string, version = "1.0.0") {
+  async function seedGlobalPackageRoot(pkgRoot: string, version = "1.0.0", name = "openclaw") {
     await fs.mkdir(pkgRoot, { recursive: true });
     await fs.writeFile(
       path.join(pkgRoot, "package.json"),
-      JSON.stringify({ name: "openclaw", version }),
+      JSON.stringify({ name, version }),
       "utf-8",
     );
   }
@@ -332,10 +332,12 @@ describe("runGatewayUpdate", () => {
     expectedInstallCommand: string;
     channel?: "stable" | "beta";
     tag?: string;
+    packageName?: string;
   }): Promise<{ calls: string[]; result: Awaited<ReturnType<typeof runGatewayUpdate>> }> {
+    const name = params.packageName ?? "openclaw";
     const nodeModules = path.join(tempDir, "node_modules");
-    const pkgRoot = path.join(nodeModules, "openclaw");
-    await seedGlobalPackageRoot(pkgRoot);
+    const pkgRoot = path.join(nodeModules, name);
+    await seedGlobalPackageRoot(pkgRoot, "1.0.0", name);
 
     const { calls, runCommand } = createGlobalInstallHarness({
       pkgRoot,
@@ -344,7 +346,7 @@ describe("runGatewayUpdate", () => {
       onInstall: async () => {
         await fs.writeFile(
           path.join(pkgRoot, "package.json"),
-          JSON.stringify({ name: "openclaw", version: "2.0.0" }),
+          JSON.stringify({ name, version: "2.0.0" }),
           "utf-8",
         );
       },
@@ -392,16 +394,16 @@ describe("runGatewayUpdate", () => {
 
   it.each([
     {
-      title: "updates global npm installs when detected",
+      title: "updates global npm installs when detected (openclaw fallback)",
       expectedInstallCommand: "npm i -g openclaw@latest --no-fund --no-audit --loglevel=error",
     },
     {
-      title: "uses update channel for global npm installs when tag is omitted",
+      title: "uses update channel for global npm installs when tag is omitted (openclaw fallback)",
       expectedInstallCommand: "npm i -g openclaw@beta --no-fund --no-audit --loglevel=error",
       channel: "beta" as const,
     },
     {
-      title: "updates global npm installs with tag override",
+      title: "updates global npm installs with tag override (openclaw fallback)",
       expectedInstallCommand: "npm i -g openclaw@beta --no-fund --no-audit --loglevel=error",
       tag: "beta",
     },
@@ -410,6 +412,45 @@ describe("runGatewayUpdate", () => {
       expectedInstallCommand,
       channel,
       tag,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.mode).toBe("npm");
+    expect(result.before?.version).toBe("1.0.0");
+    expect(result.after?.version).toBe("2.0.0");
+    expect(calls.some((call) => call === expectedInstallCommand)).toBe(true);
+  });
+
+  it.each([
+    {
+      title: "installs nightclaw from GitHub repo (stable/latest channel)",
+      expectedInstallCommand:
+        "npm i -g github:r1skarctic/nightclaw --no-fund --no-audit --loglevel=error",
+    },
+    {
+      title: "installs nightclaw from GitHub beta branch",
+      expectedInstallCommand:
+        "npm i -g github:r1skarctic/nightclaw#beta --no-fund --no-audit --loglevel=error",
+      channel: "beta" as const,
+    },
+    {
+      title: "installs nightclaw from GitHub with specific version tag",
+      expectedInstallCommand:
+        "npm i -g github:r1skarctic/nightclaw#v2026.3.3 --no-fund --no-audit --loglevel=error",
+      tag: "v2026.3.3",
+    },
+    {
+      title: "installs nightclaw from GitHub main branch for dev channel",
+      expectedInstallCommand:
+        "npm i -g github:r1skarctic/nightclaw#main --no-fund --no-audit --loglevel=error",
+      tag: "dev",
+    },
+  ])("$title", async ({ expectedInstallCommand, channel, tag }) => {
+    const { calls, result } = await runNpmGlobalUpdateCase({
+      expectedInstallCommand,
+      channel,
+      tag,
+      packageName: "nightclaw",
     });
 
     expect(result.status).toBe("ok");
