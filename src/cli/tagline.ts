@@ -1,4 +1,4 @@
-const DEFAULT_TAGLINE = "All your chats, one OpenClaw.";
+const DEFAULT_TAGLINE = "All your chats, one NightClaw.";
 export type TaglineMode = "random" | "default" | "off";
 
 const HOLIDAY_TAGLINES = {

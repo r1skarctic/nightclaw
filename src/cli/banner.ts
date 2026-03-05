@@ -61,8 +61,8 @@ export function formatCliBannerLine(version: string, options: BannerOptions = {}
   const commitLabel = commit ?? "unknown";
   const tagline = pickTagline({ ...options, mode: resolveTaglineMode(options) });
   const rich = options.richTty ?? isRich();
-  const title = "🦞 NightClaw";
-  const prefix = "🦞 ";
+  const title = "🌙 NightClaw";
+  const prefix = "🌙 ";
   const columns = options.columns ?? process.stdout.columns ?? 120;
   const plainBaseLine = `${title} ${version} (${commitLabel})`;
   const plainFullLine = tagline ? `${plainBaseLine} — ${tagline}` : plainBaseLine;
@@ -98,11 +98,12 @@ export function formatCliBannerLine(version: string, options: BannerOptions = {}
 
 const LOBSTER_ASCII = [
   "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄",
-  "██░▄▄▄░██░▄▄░██░▄▄▄██░▀██░██░▄▄▀██░████░▄▄▀██░███░██",
-  "██░███░██░▀▀░██░▄▄▄██░█░█░██░█████░████░▀▀░██░█░█░██",
-  "██░▀▀▀░██░█████░▀▀▀██░██▄░██░▀▀▄██░▀▀░█░██░██▄▀▄▀▄██",
+  "             ▙ ▌▜▘▞▀▖▌ ▌▀▛▘▞▀▖▌  ▞▀▖▌ ▌             ",
+  "             ▌▌▌▐ ▌▄▖▙▄▌ ▌ ▌  ▌  ▙▄▌▌▖▌             ",
+  "             ▌▝▌▐ ▌ ▌▌ ▌ ▌ ▌ ▖▌  ▌ ▌▙▚▌             ",
+  "             ▘ ▘▀▘▝▀ ▘ ▘ ▘ ▝▀ ▀▀▘▘ ▘▘ ▘             ",
   "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀",
-  "                  🦞 NIGHTCLAW 🦞                    ",
+  "                  🌙 NIGHTCLAW 🌙                    ",
   " ",
 ];
 
@@ -129,9 +130,9 @@ export function formatCliBannerArt(options: BannerOptions = {}): string {
     if (line.includes("NIGHTCLAW")) {
       return (
         theme.muted("              ") +
-        theme.accent("🦞") +
+        theme.accent("🌙") +
         theme.info(" NIGHTCLAW ") +
-        theme.accent("🦞")
+        theme.accent("🌙")
       );
     }
     return splitGraphemes(line).map(colorChar).join("");
