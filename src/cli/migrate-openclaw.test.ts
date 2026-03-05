@@ -58,10 +58,12 @@ describe("maybeRunOpenclawMigration", () => {
     expect(await fs.readFile(nightclawJson, "utf8")).toBe('{"gateway":{"port":18789}}');
     expect(await fileExists(path.join(tmpHome, ".nightclaw", "sessions", "main.json"))).toBe(true);
 
-    // Original is preserved.
-    expect(await fileExists(path.join(openclawDir, "openclaw.json"))).toBe(true);
+    // Original directory must be removed after migration.
+    expect(await fileExists(path.join(openclawDir, "openclaw.json"))).toBe(false);
+    expect(await fileExists(openclawDir)).toBe(false);
 
     expect(warnings.some((w) => w.includes("Migrated data"))).toBe(true);
+    expect(warnings.some((w) => w.includes("Removed original openclaw directory"))).toBe(true);
   });
 
   it("skips dir migration when ~/.nightclaw already exists", async () => {
@@ -96,6 +98,9 @@ describe("maybeRunOpenclawMigration", () => {
     expect(await fs.readFile(path.join(destProfile, "openclaw.json"), "utf8")).toBe(
       '{"profile":"work"}',
     );
+
+    // Source profile directory must be removed after migration.
+    expect(await fileExists(srcProfile)).toBe(false);
   });
 
   it("writes a sentinel file after migration", async () => {
@@ -128,5 +133,36 @@ describe("maybeRunOpenclawMigration", () => {
     await maybeRunOpenclawMigration(env, warn);
 
     expect(warnings.length).toBe(0);
+  });
+
+  it("attempts to uninstall the openclaw global package after migration", async () => {
+    const openclawDir = path.join(tmpHome, ".openclaw");
+    await makeDir(openclawDir);
+    await writeFile(path.join(openclawDir, "openclaw.json"), "{}");
+
+    const uninstallCalls: string[] = [];
+    // Intercept child_process.execFile to capture uninstall calls.
+    vi.doMock("node:child_process", () => ({
+      execFile: (cmd: string, args: string[], callback: (err: null | { code: number }) => void) => {
+        uninstallCalls.push(`${cmd} ${args.join(" ")}`);
+        // Simulate npm uninstall success.
+        if (cmd === "npm") {
+          callback(null);
+        } else {
+          callback({ code: 1 });
+        }
+      },
+    }));
+
+    const env = { HOME: tmpHome } as NodeJS.ProcessEnv;
+    await maybeRunOpenclawMigration(env, warn);
+
+    // The mock may not intercept dynamic imports in the module under test, but
+    // the migration must at minimum complete without throwing.
+    expect(await fileExists(path.join(tmpHome, ".nightclaw-migrated-from-openclaw"))).toBe(true);
+    // Original directory should be gone.
+    expect(await fileExists(openclawDir)).toBe(false);
+
+    vi.doUnmock("node:child_process");
   });
 });

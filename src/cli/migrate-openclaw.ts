@@ -3,12 +3,15 @@
  *
  * Runs automatically on the first CLI invocation after upgrade.  It:
  *   1. Copies ~/.openclaw (and ~/.openclaw-<profile>) to ~/.nightclaw (and
- *      ~/.nightclaw-<profile>) when the nightclaw directory does not yet exist.
+ *      ~/.nightclaw-<profile>) when the nightclaw directory does not yet exist,
+ *      then deletes the original openclaw directories.
  *   2. Stops and disables any running openclaw systemd user services, installs
  *      the matching nightclaw service units, then re-enables and re-starts them
  *      when they were originally active.
  *   3. Unloads and removes any openclaw launchd LaunchAgent plists, then
  *      re-loads the new nightclaw equivalents (macOS only).
+ *   4. Attempts to uninstall the openclaw global npm/pnpm/bun package so the
+ *      old binary can no longer be accidentally triggered.
  *
  * All errors are caught and printed as warnings so the migration never blocks
  * normal CLI operation.
@@ -51,7 +54,7 @@ async function copyRecursive(src: string, dest: string): Promise<void> {
 // ─── directory migration ──────────────────────────────────────────────────────
 
 /**
- * Migrate a single directory pair (src → dest).
+ * Migrate a single directory pair (src → dest), then delete the source.
  * Returns true when a migration was performed, false when skipped.
  */
 async function migrateDirectory(src: string, dest: string, warn: (m: string) => void) {
@@ -66,14 +69,20 @@ async function migrateDirectory(src: string, dest: string, warn: (m: string) => 
   }
   try {
     await copyRecursive(src, dest);
-    warn(
-      `[nightclaw] Migrated data from ${src} to ${dest}. The original directory was kept; remove it manually once you have verified the migration.`,
-    );
-    return true;
+    warn(`[nightclaw] Migrated data from ${src} to ${dest}.`);
   } catch (err) {
     warn(`[nightclaw] Could not migrate ${src} → ${dest}: ${String(err)}`);
     return false;
   }
+  // Remove the original openclaw directory so the old binary can no longer
+  // read or write stale state, and to prevent accidental openclaw restarts.
+  try {
+    await fs.rm(src, { recursive: true, force: true });
+    warn(`[nightclaw] Removed original openclaw directory: ${src}`);
+  } catch (err) {
+    warn(`[nightclaw] Could not remove ${src}: ${String(err)}`);
+  }
+  return true;
 }
 
 // ─── systemd migration ────────────────────────────────────────────────────────
@@ -374,6 +383,43 @@ async function migrateLingerServices(warn: (m: string) => void): Promise<void> {
   }
 }
 
+// ─── global uninstall ─────────────────────────────────────────────────────────
+
+/**
+ * Attempt to uninstall the legacy `openclaw` global package via npm, pnpm, or
+ * bun (whichever is available), so the old binary can no longer be accidentally
+ * invoked.  This is best-effort: errors are logged as warnings and never fatal.
+ */
+async function uninstallOpenclawGlobal(warn: (m: string) => void): Promise<void> {
+  const { execFile } = await import("node:child_process");
+  const runCmd = (cmd: string, args: string[]): Promise<number> =>
+    new Promise((resolve) => {
+      execFile(cmd, args, (err) => {
+        const code = typeof err?.code === "number" ? err.code : 0;
+        resolve(code);
+      });
+    });
+
+  // Try each package manager in turn; stop on the first success.
+  const candidates: Array<{ cmd: string; args: string[] }> = [
+    { cmd: "npm", args: ["uninstall", "-g", "openclaw"] },
+    { cmd: "pnpm", args: ["remove", "-g", "openclaw"] },
+    { cmd: "bun", args: ["remove", "-g", "openclaw"] },
+  ];
+
+  for (const { cmd, args } of candidates) {
+    try {
+      const code = await runCmd(cmd, args);
+      if (code === 0) {
+        warn(`[nightclaw] Uninstalled legacy openclaw global package via ${cmd}.`);
+        return;
+      }
+    } catch {
+      // Binary not found or failed — try the next one.
+    }
+  }
+}
+
 // ─── migration sentinel ───────────────────────────────────────────────────────
 
 const MIGRATION_SENTINEL_NAME = ".nightclaw-migrated-from-openclaw";
@@ -422,15 +468,14 @@ export async function maybeRunOpenclawMigration(
   // We also run service migration even when no data dir exists (openclaw may have
   // been installed differently), so we check services separately below.
 
-  let didSomething = false;
+  // Track whether any openclaw artifact was found so we can decide whether to
+  // attempt the global package uninstall at the end.
+  let foundOpenclaw = anyOpenclaw;
 
   // 1. Directory migration (default profile).
   if (anyOpenclaw) {
     const nightclawDataDir = path.join(home, ".nightclaw");
-    const migrated = await migrateDirectory(openclawDataDir, nightclawDataDir, warn);
-    if (migrated) {
-      didSomething = true;
-    }
+    await migrateDirectory(openclawDataDir, nightclawDataDir, warn);
   }
 
   // 2. Migrate any profiled directories (~/.openclaw-<name> → ~/.nightclaw-<name>).
@@ -442,13 +487,11 @@ export async function maybeRunOpenclawMigration(
         entry.name.startsWith(".openclaw-") &&
         !entry.name.endsWith(".openclaw-backup")
       ) {
+        foundOpenclaw = true;
         const suffix = entry.name.slice(".openclaw-".length);
         const srcProfile = path.join(home, entry.name);
         const destProfile = path.join(home, `.nightclaw-${suffix}`);
-        const migrated = await migrateDirectory(srcProfile, destProfile, warn);
-        if (migrated) {
-          didSomething = true;
-        }
+        await migrateDirectory(srcProfile, destProfile, warn);
       }
     }
   } catch (err) {
@@ -469,7 +512,17 @@ export async function maybeRunOpenclawMigration(
     warn(`[nightclaw] launchd migration error: ${String(err)}`);
   }
 
+  // 5. Remove the legacy openclaw global package only when we detected openclaw
+  //    artifacts, so it can no longer be accidentally triggered while nightclaw
+  //    is running.
+  if (foundOpenclaw) {
+    try {
+      await uninstallOpenclawGlobal(warn);
+    } catch (err) {
+      warn(`[nightclaw] openclaw global uninstall error: ${String(err)}`);
+    }
+  }
+
   // Write sentinel so we don't re-run on every invocation.
   await markMigrationDone(home);
-  void didSomething; // used implicitly via side-effects above
 }
