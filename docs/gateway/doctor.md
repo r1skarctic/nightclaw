@@ -77,7 +77,7 @@ cat ~/.openclaw/openclaw.json
 - Gateway runtime best-practice checks (Node vs Bun, version-manager paths).
 - Gateway port collision diagnostics (default `18789`).
 - Security warnings for open DM policies.
-- Gateway auth warnings when no `gateway.auth.token` is set (local mode; offers token generation).
+- Gateway auth checks for local token mode (offers token generation when no token source exists; does not overwrite token SecretRef configs).
 - systemd linger check on Linux.
 - Source install checks (pnpm workspace mismatch, missing UI assets, missing tsx binary).
 - Writes updated config + wizard metadata.
@@ -238,9 +238,11 @@ workspace.
 
 ### 12) Gateway auth checks (local token)
 
-Doctor warns when `gateway.auth` is missing on a local gateway and offers to
-generate a token. Use `openclaw doctor --generate-gateway-token` to force token
-creation in automation.
+Doctor checks local gateway token auth readiness.
+
+- If token mode needs a token and no token source exists, doctor offers to generate one.
+- If `gateway.auth.token` is SecretRef-managed but unavailable, doctor warns and does not overwrite it with plaintext.
+- `openclaw doctor --generate-gateway-token` forces generation only when no token SecretRef is configured.
 
 ### 13) Gateway health check + restart
 

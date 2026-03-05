@@ -49,8 +49,9 @@ Examples of inactive surfaces:
 
 ## Gateway auth surface diagnostics
 
-When a SecretRef is configured on `gateway.auth.password`, `gateway.remote.token`, or
-`gateway.remote.password`, gateway startup/reload logs the surface state explicitly:
+When a SecretRef is configured on `gateway.auth.token`, `gateway.auth.password`,
+`gateway.remote.token`, or `gateway.remote.password`, gateway startup/reload logs the
+surface state explicitly:
 
 - `active`: the SecretRef is part of the effective auth surface and must resolve.
 - `inactive`: the SecretRef is ignored for this runtime because another auth surface wins, or

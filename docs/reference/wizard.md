@@ -71,6 +71,13 @@ For a high-level overview, see [Onboarding Wizard](/start/wizard).
   <Step title="Gateway">
     - Port, bind, auth mode, tailscale exposure.
     - Auth recommendation: keep **Token** even for loopback so local WS clients must authenticate.
+    - In token mode, interactive onboarding offers:
+      - **Generate/store plaintext token** (default)
+      - **Use SecretRef** (opt-in)
+    - In password mode, interactive onboarding also supports plaintext or SecretRef storage.
+    - Non-interactive token SecretRef path: `--gateway-token-ref-env <ENV_VAR>`.
+      - Requires a non-empty env var in the onboarding process environment.
+      - Cannot be combined with `--gateway-token`.
     - Disable auth only if you fully trust every local process.
     - Non‑loopback binds still require auth.
   </Step>
@@ -129,6 +136,19 @@ openclaw onboard --non-interactive \
 ```
 
 Add `--json` for a machine‑readable summary.
+
+Gateway token SecretRef in non-interactive mode:
+
+```bash
+export OPENCLAW_GATEWAY_TOKEN="your-token"
+openclaw onboard --non-interactive \
+  --mode local \
+  --auth-choice skip \
+  --gateway-auth token \
+  --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN
+```
+
+`--gateway-token` and `--gateway-token-ref-env` are mutually exclusive.
 
 <Note>
 `--json` does **not** imply non-interactive mode. Use `--non-interactive` (and `--workspace`) for scripts.

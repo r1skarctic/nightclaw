@@ -61,6 +61,25 @@ Non-interactive `ref` mode contract:
 - Do not pass inline key flags (for example `--openai-api-key`) unless that env var is also set.
 - If an inline key flag is passed without the required env var, onboarding fails fast with guidance.
 
+Gateway token options in non-interactive mode:
+
+- `--gateway-auth token --gateway-token <token>` stores a plaintext token.
+- `--gateway-auth token --gateway-token-ref-env <name>` stores `gateway.auth.token` as an env SecretRef.
+- `--gateway-token` and `--gateway-token-ref-env` are mutually exclusive.
+- `--gateway-token-ref-env` requires a non-empty env var in the onboarding process environment.
+
+Example:
+
+```bash
+export OPENCLAW_GATEWAY_TOKEN="your-token"
+openclaw onboard --non-interactive \
+  --mode local \
+  --auth-choice skip \
+  --gateway-auth token \
+  --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN \
+  --accept-risk
+```
+
 Interactive onboarding behavior with reference mode:
 
 - Choose **Use secret reference** when prompted.

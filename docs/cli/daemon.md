@@ -38,6 +38,12 @@ openclaw daemon uninstall
 - `install`: `--port`, `--runtime <node|bun>`, `--token`, `--force`, `--json`
 - lifecycle (`uninstall|start|stop|restart`): `--json`
 
+Notes:
+
+- `status` resolves configured auth SecretRefs for probe auth when possible.
+- `install` resolves configured `gateway.auth.token` SecretRefs for service auth when possible.
+- If token auth requires a token and the configured token SecretRef is unresolved, install fails closed.
+
 ## Prefer
 
 Use [`openclaw gateway`](/cli/gateway) for current docs and examples.
