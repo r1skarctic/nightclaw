@@ -1,17 +1,17 @@
 {
   "name": "nightclaw",
-  "version": "2026.3.5-2",
-  "description": "Multi-channel AI gateway with extensible messaging integrations — NightClaw fork",
+  "version": "0.0.0",
+  "description": "OpenClaw fork with features from the dark side.",
   "keywords": [],
-  "homepage": "https://github.com/r1skarctic/openclaw#readme",
+  "homepage": "https://github.com/r1skarctic/nightclaw#readme",
   "bugs": {
-    "url": "https://github.com/r1skarctic/openclaw/issues"
+    "url": "https://github.com/r1skarctic/nightclaw/issues"
   },
   "license": "MIT",
   "author": "",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/r1skarctic/openclaw.git"
+    "url": "git+https://github.com/r1skarctic/nightclaw.git"
   },
   "bin": {
     "nightclaw": "nightclaw.mjs"
